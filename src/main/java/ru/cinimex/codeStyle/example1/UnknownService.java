@@ -89,12 +89,17 @@ public class UnknownService {
                         .filter(o -> o.getOption().getOptionType().equals(SHIFT.getId()))
                         .filter(o -> !Boolean.TRUE.equals(o.getIsChosen()))
                         .peek(o -> log.info("Setting isFinalOption=false in marketing: " + o.getId())) // NOSONAR log
-                        .forEach(m -> marketingClient.saveOrUpdateMarketing(marketingMapper.toDto(m.setIsFinalOption(Boolean.FALSE))));
+                        .forEach(m -> marketingClient.saveOrUpdateMarketing(marketingMapper
+                                .toDto(m.setIsFinalOption(Boolean.FALSE))));
 
-                options = options.stream().filter(o -> !o.getOption().getOptionType().equals(SHIFT.getId())).collect(Collectors.toList());
+                options = options.stream()
+                        .filter(o -> !o.getOption().getOptionType().equals(SHIFT.getId()))
+                        .collect(Collectors.toList());
+
                 options.add(savedMarketing);
             } else {
-                log.info(String.format("Опция сдвиг уже привязана к платежу %s с суммой %s", paymentToShift.getId(), paymentToShift.getPaymentSum()));
+                log.info(String.format("Опция сдвиг уже привязана к платежу %s с суммой %s",
+                        paymentToShift.getId(), paymentToShift.getPaymentSum()));
             }
         } else {
             log.info("Платёж для сдвига не найден. Опция сдвиг недоступна");
@@ -126,7 +131,9 @@ public class UnknownService {
                                            Boolean isUnpaidOverdueExist,
                                            List<Marketing> appliedOptions) {
         List<Marketing> availabilityOptions = new ArrayList<>();
-        fillAvailabilityOptions(options, orderInfo, optionAvailability, isUnpaidOverdueExist, appliedOptions, availabilityOptions);
+        fillAvailabilityOptions(options, orderInfo, optionAvailability, isUnpaidOverdueExist, appliedOptions,
+                availabilityOptions);
+
         return availabilityOptions;
     }
 

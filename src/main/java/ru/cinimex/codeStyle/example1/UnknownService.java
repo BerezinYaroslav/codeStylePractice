@@ -39,7 +39,7 @@ public class UnknownService {
         logAllOptions(orderInfo, options, optionAvailability, isUnpaidOverdueExist);
 
         log.info("Находим примененные опции");
-        List<Marketing> appliedOptions = getAppliedOptions(options, orderInfo);
+        List<Marketing> appliedOptions = getAppliedOptions();
         log.info("Примененные опции: " + appliedOptions);
 
         log.info("Находим доступные опции");
@@ -56,9 +56,11 @@ public class UnknownService {
         return responseOptions;
     }
 
-    private void shiftPayment(OrderInfo orderInfo, List<Marketing> options, PaymentScheduleInfo paymentToShift) {
+    private void shiftPayment(OrderInfo orderInfo,
+                              List<Marketing> options,
+                              PaymentScheduleInfo paymentToShift,
+                              Option optionShift) {
         if (paymentToShift != null) {
-            Option optionShift = marketingClient.getOption(SHIFT.getTypeCode(), paymentToShift.getPaymentSum());
             log.info("optionShift: " + optionShift);
 
             if (optionShift != null && options.stream()
@@ -110,16 +112,11 @@ public class UnknownService {
     }
 
     List<Marketing> getAllOptions(OrderInfo orderInfo) {
-        List<Marketing> options = marketingClient.getAllMarketingOptionsForOrder(orderInfo.getId());
-
-        return options;
+        return marketingClient.getAllMarketingOptionsForOrder(orderInfo.getId());
     }
 
-    List<Marketing> getAppliedOptions(List<Marketing> options, OrderInfo orderInfo) {
-        List<Marketing> appliedOptions = new ArrayList<>(List.of(new Marketing()));
-
-
-        return appliedOptions;
+    List<Marketing> getAppliedOptions() {
+        return new ArrayList<>(List.of(new Marketing()));
     }
 
     List<Marketing> getAvailabilityOptions(List<Marketing> options,
@@ -184,7 +181,9 @@ public class UnknownService {
 
         // сдвиг платежей
         PaymentScheduleInfo paymentToShift = optionService.getAvailablePaymentForShift(orderInfo.getPaymentSchedules());
-        shiftPayment(orderInfo, options, paymentToShift);
+        Option optionShift = marketingClient.getOption(SHIFT.getTypeCode(), paymentToShift.getPaymentSum());
+        log.info("optionShift: " + optionShift);
+        shiftPayment(orderInfo, options, paymentToShift, optionShift);
     }
 
     List<GetOrderInfoByClientIdAndOrderIdOption> getResponseOptions(OrderInfo orderInfo,

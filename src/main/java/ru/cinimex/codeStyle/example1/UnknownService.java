@@ -43,6 +43,7 @@ public class UnknownService {
         log.info("Примененные опции: " + appliedOptions);
 
         log.info("Находим доступные опции");
+        // возможно, лучше заменить availability на available
         List<Marketing> availabilityOptions = getAvailabilityOptions(options,
                 orderInfo, optionAvailability, isUnpaidOverdueExist, appliedOptions);
 

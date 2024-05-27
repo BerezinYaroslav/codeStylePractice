@@ -61,9 +61,9 @@ public class UnknownService {
                               List<Marketing> options,
                               PaymentScheduleInfo paymentToShift,
                               Option optionShift) {
-        if (paymentToShift != null) {
-            log.info("optionShift: " + optionShift);
+        log.info("optionShift: " + optionShift);
 
+        if (paymentToShift != null) {
             if (optionShift != null && options.stream()
                     .filter(m -> !m.getIsPaid())
                     .map(Marketing::getOption)

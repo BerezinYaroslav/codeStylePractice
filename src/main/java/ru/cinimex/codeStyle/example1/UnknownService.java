@@ -60,6 +60,7 @@ public class UnknownService {
         if (paymentToShift != null) {
             Option optionShift = marketingClient.getOption(SHIFT.getTypeCode(), paymentToShift.getPaymentSum());
             log.info("optionShift: " + optionShift);
+
             if (optionShift != null && options.stream()
                     .filter(m -> !m.getIsPaid())
                     .map(Marketing::getOption)
@@ -86,6 +87,7 @@ public class UnknownService {
                         .filter(o -> !Boolean.TRUE.equals(o.getIsChosen()))
                         .peek(o -> log.info("Setting isFinalOption=false in marketing: " + o.getId())) // NOSONAR log
                         .forEach(m -> marketingClient.saveOrUpdateMarketing(marketingMapper.toDto(m.setIsFinalOption(Boolean.FALSE))));
+
                 options = options.stream().filter(o -> !o.getOption().getOptionType().equals(SHIFT.getId())).collect(Collectors.toList());
                 options.add(savedMarketing);
             } else {
@@ -140,6 +142,7 @@ public class UnknownService {
             boolean isAppliedShift = appliedOptions.stream()
                     .anyMatch(o -> o.getOption().getOptionType().equals(SHIFT.getId())
                             && o.getScoringTypeId().equals(ScoringType.MARKETING.getId()));
+
             for (Marketing option : options) {
                 log.info("isChosen: " + option.getIsChosen() + ", isAvailable: "
                         + (optionAvailability != null ? optionAvailability.getIsShiftAvailable() : true));
@@ -153,7 +156,6 @@ public class UnknownService {
                         !isUnpaidOverdueExist && option.getScoringTypeId().equals(ScoringType.MARKETING.getId())) {
                     log.info("Опция Сдвиг доступна и еще не оплачена");
                     availabilityOptions.add(option);
-
                 }
                 if (DiscountType.isDiscount(option.getOption().getOptionType())) {
                     availabilityOptions.add(option);
@@ -199,6 +201,7 @@ public class UnknownService {
                                      List<GetOrderInfoByClientIdAndOrderIdOption> responseOptions) {
         if (!availabilityOptions.isEmpty()) {
             log.info("Формируем структуру доступных опций для отображения в мобильном приложении");
+
             responseOptions.addAll(availabilityOptions.stream()
                     .filter(availableOptions -> !StringUtils.equals(availableOptions.getOption().getTarget(),
                             PURCHASE_SUCCESS.getValue()))
@@ -209,6 +212,7 @@ public class UnknownService {
         if (!appliedOptions.isEmpty()) {
             log.info("Формируем структуру примененных опций для отображения в мобильном приложении");
             Map<Long, HashSet<Long>> marketingMap = new HashMap<>();
+
             responseOptions.addAll(appliedOptions.stream()
                     .filter(applOptions -> !StringUtils.equals(applOptions.getOption().getTarget(),
                             PURCHASE_SUCCESS.getValue()))

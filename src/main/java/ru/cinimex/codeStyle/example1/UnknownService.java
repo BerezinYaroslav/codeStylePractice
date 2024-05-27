@@ -2,80 +2,68 @@ package ru.cinimex.codeStyle.example1;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import ru.cinimex.codeStyle.example1.mocks.DiscountType;
-import ru.cinimex.codeStyle.example1.mocks.MarketClient;
-import ru.cinimex.codeStyle.example1.mocks.MarketingMapper;
-import ru.cinimex.codeStyle.example1.mocks.OptionType;
-import ru.cinimex.codeStyle.example1.mocks.SHIFT;
-import ru.cinimex.codeStyle.example1.mocks.SIX;
+import ru.cinimex.codeStyle.example1.mocks.*;
 import ru.cinimex.codeStyle.example1.mocks.dto.AppliedDto;
-import ru.cinimex.codeStyle.example1.mocks.ClientInfo;
-import ru.cinimex.codeStyle.example1.mocks.GetOrderInfoByClientIdAndOrderIdOption;
-import ru.cinimex.codeStyle.example1.mocks.Marketing;
-import ru.cinimex.codeStyle.example1.mocks.Option;
-import ru.cinimex.codeStyle.example1.mocks.OptionAvailability;
-import ru.cinimex.codeStyle.example1.mocks.OrderInfo;
-import ru.cinimex.codeStyle.example1.mocks.PaymentScheduleInfo;
-import ru.cinimex.codeStyle.example1.mocks.ScoringType;
 import ru.cinimex.codeStyle.example1.mocks.dto.AvailabilityDto;
-import ru.cinimex.codeStyle.example1.mocks.enums.OptionTarget;
 import ru.cinimex.codeStyle.example1.mocks.service.OptionService;
 import ru.cinimex.codeStyle.example1.mocks.service.impl.OptionAvailabilityService;
 import ru.cinimex.codeStyle.example1.mocks.service.impl.OptionCommonsService;
 import ru.cinimex.codeStyle.example1.mocks.service.impl.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
+
+import static ru.cinimex.codeStyle.example1.mocks.enums.OptionTarget.PURCHASE_SUCCESS;
 
 @Slf4j
 @RequiredArgsConstructor
 public class UnknownService {
-    MarketClient marketingClient;
-    ClientInfo clientInfoClient;
-    OptionService optionService;
-    MarketingMapper marketingMapper;
-    OptionAvailabilityService optionAvailabilityService;
-    OptionCommonsService optionCommonsService;
-    private static OptionTarget PURCHASE_SUCCESS;
+    private final MarketClient marketingClient;
+    private final ClientInfo clientInfoClient;
+    private final OptionService optionService;
+    private final MarketingMapper marketingMapper;
+    private final OptionAvailabilityService optionAvailabilityService;
+    private final OptionCommonsService optionCommonsService;
 
     public List<GetOrderInfoByClientIdAndOrderIdOption> getOptionsList(Long clientId, OrderInfo orderInfo) {
-
+        // возможно, лучше вынести логирование из основного метода в более мелкие, в данном случае в getAllOptions
         log.info("Получаем список всех возможных опций");
-        List<Marketing> options = marketingClient.getAllMarketingOptionsForOrder(orderInfo.getId());
-        var optionAvailabilities = marketingClient.checkOptionAvailabilityForClient(clientId);
-        OptionAvailability optionAvailability = null;
-        if (!optionAvailabilities.isEmpty()) {
-            optionAvailability = optionAvailabilities.get(0);
-        }
+        List<Marketing> options = getAllOptions(orderInfo);
 
+        // необходимый для заполнения опций код
+        OptionAvailability optionAvailability = getOptionAvailability(clientId);
         Boolean isUnpaidOverdueExist = clientInfoClient.getClientOverdue(clientId).getBody().getHasOverdue();
-        log.info("isUnpaidOverdueExist: " + isUnpaidOverdueExist);
-        log.info("OrderInfo: " + orderInfo);
-        log.info("По заказу " + orderInfo.getId() + " " +
-                "isSixAvailable = " + (optionAvailability != null ? optionAvailability.getIsSixAvailable() : !isUnpaidOverdueExist) + " " +
-                "и IsShiftAvailable = " + (optionAvailability != null ? optionAvailability.getIsShiftAvailable() : !isUnpaidOverdueExist));
 
-        log.info("found options: " + options);
+        // логирование всех опций
+        logAllOptions(orderInfo, options, optionAvailability, isUnpaidOverdueExist);
+
         log.info("Находим примененные опции");
-        List<Marketing> appliedOptions = new ArrayList<>(getAppliedOptions(options, orderInfo));
+        List<Marketing> appliedOptions = getAppliedOptions(options, orderInfo);
         log.info("Примененные опции: " + appliedOptions);
 
         log.info("Находим доступные опции");
-        List<Marketing> availabilityOptions = new ArrayList<>();
+        List<Marketing> availabilityOptions = getAvailabilityOptions(options,
+                orderInfo, optionAvailability, isUnpaidOverdueExist, appliedOptions);
 
-        PaymentScheduleInfo paymentToShift = optionService.getAvailablePaymentForShift(orderInfo.getPaymentSchedules());
+        // получение списка искомых опцией
+        List<GetOrderInfoByClientIdAndOrderIdOption> responseOptions = getResponseOptions(orderInfo,
+                appliedOptions, availabilityOptions);
+
+        // логирование искомых опций
+        logResponseOptions(responseOptions);
+
+        return responseOptions;
+    }
+
+    private void shiftPayment(OrderInfo orderInfo, List<Marketing> options, PaymentScheduleInfo paymentToShift) {
         if (paymentToShift != null) {
             Option optionShift = marketingClient.getOption(SHIFT.getTypeCode(), paymentToShift.getPaymentSum());
             log.info("optionShift: " + optionShift);
-            if (optionShift != null && options.stream().filter(m -> !m.getIsPaid()).map(Marketing::getOption).noneMatch(o -> o.getId().equals(optionShift.getId()))) {
+            if (optionShift != null && options.stream()
+                    .filter(m -> !m.getIsPaid())
+                    .map(Marketing::getOption)
+                    .noneMatch(o -> o.getId().equals(optionShift.getId()))) {
                 Marketing marketingForShift = new Marketing();
                 marketingForShift.setClientId(orderInfo.getClientInfo().getId());
                 marketingForShift.setOrderId(orderInfo.getId());
@@ -106,13 +94,57 @@ public class UnknownService {
         } else {
             log.info("Платёж для сдвига не найден. Опция сдвиг недоступна");
         }
+    }
 
+    private OptionAvailability getOptionAvailability(Long clientId) {
+        var optionAvailabilities = marketingClient.checkOptionAvailabilityForClient(clientId);
+        OptionAvailability optionAvailability = null;
+
+        if (!optionAvailabilities.isEmpty()) {
+            optionAvailability = optionAvailabilities.get(0);
+        }
+
+        return optionAvailability;
+    }
+
+    List<Marketing> getAllOptions(OrderInfo orderInfo) {
+        List<Marketing> options = marketingClient.getAllMarketingOptionsForOrder(orderInfo.getId());
+
+        return options;
+    }
+
+    List<Marketing> getAppliedOptions(List<Marketing> options, OrderInfo orderInfo) {
+        List<Marketing> appliedOptions = new ArrayList<>(List.of(new Marketing()));
+
+
+        return appliedOptions;
+    }
+
+    List<Marketing> getAvailabilityOptions(List<Marketing> options,
+                                           OrderInfo orderInfo,
+                                           OptionAvailability optionAvailability,
+                                           Boolean isUnpaidOverdueExist,
+                                           List<Marketing> appliedOptions) {
+        List<Marketing> availabilityOptions = new ArrayList<>();
+        fillAvailabilityOptions(options, orderInfo, optionAvailability, isUnpaidOverdueExist, appliedOptions, availabilityOptions);
+        return availabilityOptions;
+    }
+
+    private void fillAvailabilityOptions(List<Marketing> options,
+                                         OrderInfo orderInfo,
+                                         OptionAvailability optionAvailability,
+                                         Boolean isUnpaidOverdueExist,
+                                         List<Marketing> appliedOptions,
+                                         List<Marketing> availabilityOptions) {
         if (optionAvailability != null || !isUnpaidOverdueExist) {
-            boolean isAppliedShift = appliedOptions.stream().anyMatch(o -> o.getOption().getOptionType().equals(SHIFT.getId())
-                    && o.getScoringTypeId().equals(ScoringType.MARKETING.getId()));
+            boolean isAppliedShift = appliedOptions.stream()
+                    .anyMatch(o -> o.getOption().getOptionType().equals(SHIFT.getId())
+                            && o.getScoringTypeId().equals(ScoringType.MARKETING.getId()));
             for (Marketing option : options) {
-                log.info("isChosen: " + option.getIsChosen() + ", isAvailable: " + (optionAvailability != null ? optionAvailability.getIsShiftAvailable() : true));
+                log.info("isChosen: " + option.getIsChosen() + ", isAvailable: "
+                        + (optionAvailability != null ? optionAvailability.getIsShiftAvailable() : true));
                 log.info("option: " + option);
+
                 if (option.getIsPaid() != null
                         && !option.getIsPaid() &&
                         Objects.equals(option.getOption().getOptionType(), OptionType.SHIFT.getId()) &&
@@ -133,7 +165,8 @@ public class UnknownService {
                     && !isAppliedShift) {
                 try {
                     log.info("Шестерка доступна, ищем подходящую опцию");
-                    var sixOption = marketingClient.getOption(SIX.getTypeCode(), optionCommonsService.getAmountForOptionTariff(orderInfo));
+                    var sixOption = marketingClient.getOption(SIX.getTypeCode(),
+                            optionCommonsService.getAmountForOptionTariff(orderInfo));
                     var sixMarketing = optionCommonsService.getMarketing(orderInfo, sixOption);
 
                     log.info("Добавляем опцию Шестерка: " + sixMarketing);
@@ -147,11 +180,28 @@ public class UnknownService {
             }
         }
 
-        List<GetOrderInfoByClientIdAndOrderIdOption> responseOption = new ArrayList<>();
+        // сдвиг платежей
+        PaymentScheduleInfo paymentToShift = optionService.getAvailablePaymentForShift(orderInfo.getPaymentSchedules());
+        shiftPayment(orderInfo, options, paymentToShift);
+    }
+
+    List<GetOrderInfoByClientIdAndOrderIdOption> getResponseOptions(OrderInfo orderInfo,
+                                                                    List<Marketing> appliedOptions,
+                                                                    List<Marketing> availabilityOptions) {
+        List<GetOrderInfoByClientIdAndOrderIdOption> responseOptions = new ArrayList<>();
+        fillResponseOptions(orderInfo, appliedOptions, availabilityOptions, responseOptions);
+        return responseOptions;
+    }
+
+    private void fillResponseOptions(OrderInfo orderInfo,
+                                     List<Marketing> appliedOptions,
+                                     List<Marketing> availabilityOptions,
+                                     List<GetOrderInfoByClientIdAndOrderIdOption> responseOptions) {
         if (!availabilityOptions.isEmpty()) {
             log.info("Формируем структуру доступных опций для отображения в мобильном приложении");
-            responseOption.addAll(availabilityOptions.stream()
-                    .filter(availableOptions -> !StringUtils.equals(availableOptions.getOption().getTarget(), PURCHASE_SUCCESS.getValue()))
+            responseOptions.addAll(availabilityOptions.stream()
+                    .filter(availableOptions -> !StringUtils.equals(availableOptions.getOption().getTarget(),
+                            PURCHASE_SUCCESS.getValue()))
                     .map(o -> getAvailabilityDTO(o, orderInfo))
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList()));
@@ -159,36 +209,50 @@ public class UnknownService {
         if (!appliedOptions.isEmpty()) {
             log.info("Формируем структуру примененных опций для отображения в мобильном приложении");
             Map<Long, HashSet<Long>> marketingMap = new HashMap<>();
-            responseOption.addAll(appliedOptions.stream()
-                    .filter(applOptions -> !StringUtils.equals(applOptions.getOption().getTarget(), PURCHASE_SUCCESS.getValue()))
+            responseOptions.addAll(appliedOptions.stream()
+                    .filter(applOptions -> !StringUtils.equals(applOptions.getOption().getTarget(),
+                            PURCHASE_SUCCESS.getValue()))
                     .map(o -> getAppliedDTO(o, orderInfo, marketingMap))
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList()));
         }
-        log.info("Available options: " + responseOption.stream()
+    }
+
+    private static void logAllOptions(OrderInfo orderInfo,
+                                      List<Marketing> options,
+                                      OptionAvailability optionAvailability,
+                                      Boolean isUnpaidOverdueExist) {
+        log.info("isUnpaidOverdueExist: " + isUnpaidOverdueExist);
+        log.info("OrderInfo: " + orderInfo);
+        log.info("По заказу " + orderInfo.getId() + " " +
+                "isSixAvailable = " +
+                (optionAvailability != null ? optionAvailability.getIsSixAvailable() : !isUnpaidOverdueExist) + " " +
+                "и IsShiftAvailable = " +
+                (optionAvailability != null ? optionAvailability.getIsShiftAvailable() : !isUnpaidOverdueExist));
+        log.info("found options: " + options);
+    }
+
+    private void logResponseOptions(List<GetOrderInfoByClientIdAndOrderIdOption> responseOptions) {
+        log.info("Available options: " + responseOptions.stream()
                 .filter(o -> !o.getIsApplied())
                 .collect(Collectors.groupingBy(GetOrderInfoByClientIdAndOrderIdOption::getCode)));
-        log.info("Applied options: " + responseOption.stream()
+        log.info("Applied options: " + responseOptions.stream()
                 .filter(GetOrderInfoByClientIdAndOrderIdOption::getIsApplied)
                 .collect(Collectors.groupingBy(GetOrderInfoByClientIdAndOrderIdOption::getCode)));
 
-        if (!responseOption.isEmpty()) {
-            return responseOption;
+        if (responseOptions.isEmpty()) {
+            log.info("У клиента нет доступных опций");
         }
-        log.info("У клиента нет доступных опций");
-        return Collections.emptyList();
     }
 
-    private List<Marketing> getAppliedOptions(List<Marketing> markets, OrderInfo orderInfo){
 
-        return new ArrayList<>(Arrays.asList(new Marketing()));
-    }
-
-    private AvailabilityDto getAvailabilityDTO(Marketing marketing, OrderInfo orderInfo){
+    private AvailabilityDto getAvailabilityDTO(Marketing marketing, OrderInfo orderInfo) {
         return new AvailabilityDto();
     }
 
-    private AppliedDto getAppliedDTO(Marketing marketing, OrderInfo orderInfo, Map<Long, HashSet<Long>> marketingMap){
+    private AppliedDto getAppliedDTO(Marketing marketing,
+                                     OrderInfo orderInfo,
+                                     Map<Long, HashSet<Long>> marketingMap) {
         return new AppliedDto();
     }
 }
